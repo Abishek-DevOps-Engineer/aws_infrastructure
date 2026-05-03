@@ -1,0 +1,177 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "This is a template for ec2 instance creation for Master and slave in Jenkins"
+
+Parameters:
+    ImageId:
+      Type: String
+      Default: "ami-05d2d839d4f73aafb"
+      Description: "Ubuntu image id"
+    
+    MasterEc2InstanceType:
+      Type: String
+      Default: "t2.micro"
+      Description: "Ec2 Instance Type"
+    
+    MasterInstanceAMI:
+      Type: String
+      Default: "ami-07a00cf47dbbc844c"
+      Description: "Master EC2 AMI"
+    
+    NodeInstanceAMI:
+      Type: String
+      Default: "ami-07a00cf47dbbc844c"
+      Description: "Slave EC2 AMI"
+
+    NodeEc2InstanceType:
+      Type: String
+      Default: "t3.medium"
+      Description: "Node Ec2 Instance Type"
+    
+    MasterInstanceName:
+      Type: String
+      Default: "jenkinsmaster"
+      Description: "Jenkins Master Instance Name"
+    
+    MasterSecurityGroupName:
+      Type: String
+      Default: "jenkinsmastersg"
+      Description: "Jenkins Master Security Group Name"
+    
+    NodeSecurityGroupName:
+      Type: String
+      Default: "jenkinsnodesg"
+      Description: "Jenkins Node Security Group Name"
+
+    NodeInstanceName:
+      Type: String
+      Default: "jenkinsnode"
+      Description: "Jenkins Master Instance Name"
+    
+    KeyPairNode:
+      Type: String
+      Default: "slavekeypair"
+      Description: "Slave key Pair"
+
+    KeyPairMaster:
+      Type: String
+      Default: "masterkeypair"
+      Description: "Master key Pair"
+    
+    VPCID:
+      Type: String
+      Default: "vpc-0afae37be00f20bba"
+      Description: "Aws VPC"
+    
+
+Resources:
+#Security Group for Master Ec2 Instance
+    MasterSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: "Security Group for Master"
+          VpcId: !Ref VPCID
+          SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 22
+                ToPort: 22
+                CidrIp: 0.0.0.0/0
+              - IpProtocol: tcp
+                FromPort: 8080
+                ToPort: 8080
+                CidrIp: 0.0.0.0/0
+          Tags:
+            - Key: Name
+              Value: !Ref MasterSecurityGroupName 
+          
+#Security Group for Node Ec2 Instance
+    NodeSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: "Security Group for Slave"
+          VpcId: !Ref VPCID
+          SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 22
+                ToPort: 22
+                CidrIp: 0.0.0.0/0
+              - IpProtocol: tcp
+                FromPort: 22
+                ToPort: 22
+                SourceSecurityGroupId: !Ref MasterSecurityGroup
+          Tags:
+            - Key: Name
+              Value: !Ref NodeSecurityGroupName 
+          
+#Master Ec2 Instance  
+    MasterEC2Instance:
+      Type: AWS::EC2::Instance
+      Properties:
+          ImageId: !Ref MasterInstanceAMI
+          KeyName: !Ref KeyPairMaster
+          InstanceType: !Ref MasterEc2InstanceType
+          NetworkInterfaces:
+              - AssociatePublicIpAddress: "true"
+                DeviceIndex: "0"
+                GroupSet:
+                  - !Ref MasterSecurityGroup
+          UserData:
+            Fn::Base64:  |
+              #!/bin/bash
+              sudo apt update -y
+              sudo apt install openjdk-21-jdk -y
+              
+              sudo wget -O /etc/apt/keyrings/jenkins-keyring.asc \
+                https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+              echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc]" \
+                https://pkg.jenkins.io/debian-stable binary/ | sudo tee \
+                /etc/apt/sources.list.d/jenkins.list > /dev/null
+              sudo apt update -y
+              sudo apt install jenkins -y
+          Tags:
+            - Key: Name
+              Value: !Ref MasterInstanceName
+#Node Ec2 Instance 
+    NodeEC2Instance:
+      Type: AWS::EC2::Instance
+      Properties:
+          ImageId: !Ref NodeInstanceAMI
+          KeyName: !Ref KeyPairNode
+          InstanceType: !Ref NodeEc2InstanceType
+          NetworkInterfaces:
+              - AssociatePublicIpAddress: "true"
+                DeviceIndex: "0"
+                GroupSet:
+                  - !Ref NodeSecurityGroup
+          UserData:
+            Fn::Base64: |
+              #!/bin/bash
+              sudo apt update -y
+              sudo apt install python3 -y
+              sudo apt remove -y $(dpkg --get-selections docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc | cut -f1)
+              
+              # Add Docker's official GPG key:
+              sudo apt update -y
+              sudo apt install ca-certificates curl -y
+              sudo install -m 0755 -d /etc/apt/keyrings
+              sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+              sudo chmod a+r /etc/apt/keyrings/docker.asc
+              
+              # Add the repository to Apt sources:
+              sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
+              Types: deb
+              URIs: https://download.docker.com/linux/ubuntu
+              Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+              Components: stable
+              Architectures: $(dpkg --print-architecture)
+              Signed-By: /etc/apt/keyrings/docker.asc
+              EOF
+              
+              sudo apt update -y
+              sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+          Tags:
+            - Key: Name
+              Value: !Ref NodeInstanceName
+              
+              
+                
+    
