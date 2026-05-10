@@ -1,15 +1,10 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: "This is a template for ec2 instance creation for Master and slave in Jenkins"
 
-Parameters:
-    ImageId:
-      Type: String
-      Default: "ami-05d2d839d4f73aafb"
-      Description: "Ubuntu image id"
-    
+Parameters:    
     MasterEc2InstanceType:
       Type: String
-      Default: "t2.micro"
+      Default: "t3.micro"
       Description: "Ec2 Instance Type"
     
     MasterInstanceAMI:
@@ -19,12 +14,12 @@ Parameters:
     
     NodeInstanceAMI:
       Type: String
-      Default: "ami-07a00cf47dbbc844c"
+      Default: "ami-01b40e1bcccae197a"
       Description: "Slave EC2 AMI"
 
     NodeEc2InstanceType:
       Type: String
-      Default: "t3.medium"
+      Default: "m7i-flex.large"
       Description: "Node Ec2 Instance Type"
     
     MasterInstanceName:
@@ -57,19 +52,258 @@ Parameters:
       Default: "masterkeypair"
       Description: "Master key Pair"
     
+    KeyPairBastionHost:
+      Type: String
+      Default: "bastionhostkeypair"
+      Description: "Master key Pair"
+    
     VPCID:
       Type: String
       Default: "vpc-0afae37be00f20bba"
       Description: "Aws VPC"
-    
+
+# VPC Name   
+    VpcName:
+      Type: String
+      Default: "prod-vpc"
+      Description: "VPC"
+
+#VPC Cidr block      
+    VpcCidrbblock:
+      Type: String
+      Default: "10.0.0.0/16"
+      Description: "IPv4 Cidrblock"
+
+#VPC Instance Tenancy     
+    VpcInstanceTenacy:
+      Type: String
+      Default: "default"
+      Description: "The allowed tenancy of instances launched into the VPC"
+
+#Public Subnet name for jenkins master    
+    PublicSubnetNameJenkinsMaster:
+      Type: String
+      Default: "publicsubnetjenkinsmaster"
+      Description: "Public subnet for jenkins master"
+
+#Public Subnet AZ    
+    AZNamePublicSubnet:
+      Type: String
+      Default: "ap-south-1a"
+      Description: "Public subnet AZ"
+
+#Cidr block for public subnet 
+    PublicSubnetcidrblock:
+      Type: String
+      Default: "10.0.1.0/24"
+      Description: "Public subnet cidr block"
+
+#VPC Internet Gateway
+    InternetGwName:
+      Type: String
+      Default: "jenkinsprojectigw"
+      Description: "Internet Gateway"
+
+#Route Table Name Public Subnet
+    RouteTableNamePublicSubnet:
+      Type: String
+      Default: "publicsubnetroutetable"
+      Description: "Route table for Public Subnet"
+
+#Private Subnet name
+    PrivateSubnetName:
+      Type: String
+      Default: "privatesubnetjenkinsslave"
+      Description: "Private subnet for jenkins slave"
+
+#Cidr block for private subnet  
+    PrivateSubnetcidrblock:
+      Type: String
+      Default: "10.0.2.0/24"
+      Description: "Private subnet cidr block"
+
+#VPC NAT Gateway
+    NatGateway:
+      Type: String
+      Default: "jenkinsprojectnatgw"
+      Description: "NAT Gateway"
+
+#Route Table Name Private Subnet
+    RouteTableNamePrivateSubnet:
+      Type: String
+      Default: "privatesubnetroutetable"
+      Description: "Route table for Private Subnet"
+
+#Private Subnet AZ name    
+    AZNamePrivateSubnet:
+      Type: String
+      Default: "ap-south-1b"
+      Description: "Private subnet AZ"
+
+#Bastion host Ec2 Instance
+    BastionHostEc2InstanceName:
+      Type: String
+      Default: "bastionhost"
+      Description: "Bastionhost instance name"
+
+#Bastion host Instance Type
+    BastionHostEc2InstanceType:
+      Type: String
+      Default: "t3.micro"
+      Description: "Node Ec2 Instance Type"
+
+#Bastion host AMI
+    BastionHostAMI:
+      Type: String
+      Default: "ami-07a00cf47dbbc844c"
+      Description: "Bastion Host AMI"
+
+#Bastion host Security Group name
+    BastionHostSecurityGroupName:
+      Type: String
+      Default: "bastionhostsg"
+      Description: "Bastion Host Security Group Name"
+
+
 
 Resources:
+#VPC
+    AbishekVPC:
+      Type: AWS::EC2::VPC
+      Properties:
+          CidrBlock: !Ref VpcCidrbblock
+          InstanceTenancy: !Ref VpcInstanceTenacy
+          Tags:
+            - Key: Name
+              Value: !Ref  VpcName
+
+#Public Subnet
+    PublicSubnet:
+      Type: AWS::EC2::Subnet
+      Properties:
+          VpcId: !Ref AbishekVPC
+          AvailabilityZone: !Ref AZNamePublicSubnet
+          CidrBlock: !Ref PublicSubnetcidrblock
+          MapPublicIpOnLaunch: true
+          Tags:
+              - Key: Name
+                Value: !Ref PublicSubnetNameJenkinsMaster
+
+#Internet Gateway
+    InternetGw:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+          Tags:
+              - Key: Name
+                Value: !Ref InternetGwName
+
+#Attach Internet gateway to VPC
+    InternetGWAttachMent:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+          VpcId: !Ref AbishekVPC
+          InternetGatewayId: !Ref InternetGw
+
+
+#Route Table Public Subnet
+    PublicSubnetRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+          VpcId: !Ref AbishekVPC
+          Tags:
+              - Key: Name
+                Value: !Ref RouteTableNamePublicSubnet
+
+#Public Subnet Association with route table
+    PublicSubnetAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+          RouteTableId: !Ref PublicSubnetRouteTable
+          SubnetId: !Ref PublicSubnet
+
+
+#Route for Internet Gateway
+    InternetgwRoute:
+      Type: AWS::EC2::Route
+      Properties:
+          RouteTableId: !Ref PublicSubnetRouteTable
+          DestinationCidrBlock: 0.0.0.0/0
+          GatewayId: !Ref InternetGw
+
+#Private Subnet
+    PrivateSubnet:
+      Type: AWS::EC2::Subnet
+      Properties:
+          VpcId: !Ref AbishekVPC
+          AvailabilityZone: !Ref AZNamePrivateSubnet
+          CidrBlock: !Ref PrivateSubnetcidrblock
+          Tags:
+              - Key: Name
+                Value: !Ref PrivateSubnetName
+#Elastic IP
+    ElasticIp:
+      Type: AWS::EC2::EIP
+      Properties:
+          Domain: vpc
+                
+
+#NAT Gateway
+    NATGw:
+      Type: AWS::EC2::NatGateway
+      Properties:
+        AllocationId: !GetAtt ElasticIp.AllocationId
+        SubnetId: !Ref PublicSubnet
+        Tags:
+            - Key: Name
+              Value: !Ref NatGateway
+
+#Route Table Private Subnet
+    PrivateSubnetRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+          VpcId: !Ref AbishekVPC
+          Tags:
+              - Key: Name
+                Value: !Ref RouteTableNamePrivateSubnet
+
+#Private Subnet Association with route table
+    PrivateSubnetAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+          RouteTableId: !Ref PrivateSubnetRouteTable
+          SubnetId: !Ref PrivateSubnet
+
+#Route for NAT Gateway
+    NATgwRoute:
+      Type: AWS::EC2::Route
+      Properties:
+          RouteTableId: !Ref PrivateSubnetRouteTable
+          DestinationCidrBlock: 0.0.0.0/0
+          NatGatewayId: !Ref NATGw
+    
+
+#Security Group for Bastion Host
+    BastionHostSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: "Security Group for Slave"
+          VpcId: !Ref AbishekVPC
+          SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 22
+                ToPort: 22
+                CidrIp: 0.0.0.0/0
+          Tags:
+            - Key: Name
+              Value: !Ref BastionHostSecurityGroupName 
+
+        
 #Security Group for Master Ec2 Instance
     MasterSecurityGroup:
       Type: AWS::EC2::SecurityGroup
       Properties:
           GroupDescription: "Security Group for Master"
-          VpcId: !Ref VPCID
+          VpcId: !Ref AbishekVPC
           SecurityGroupIngress:
               - IpProtocol: tcp
                 FromPort: 22
@@ -84,24 +318,26 @@ Resources:
               Value: !Ref MasterSecurityGroupName 
           
 #Security Group for Node Ec2 Instance
+#Added MasterSecurityGroup as SourceSecurityGroupId for master to connect to node using ssh
+#Added BastionHost Security Group to ssh into the node machine using the Bastion Host
     NodeSecurityGroup:
       Type: AWS::EC2::SecurityGroup
       Properties:
           GroupDescription: "Security Group for Slave"
-          VpcId: !Ref VPCID
+          VpcId: !Ref AbishekVPC
           SecurityGroupIngress:
               - IpProtocol: tcp
                 FromPort: 22
                 ToPort: 22
-                CidrIp: 0.0.0.0/0
+                SourceSecurityGroupId: !Ref MasterSecurityGroup
               - IpProtocol: tcp
                 FromPort: 22
                 ToPort: 22
-                SourceSecurityGroupId: !Ref MasterSecurityGroup
+                SourceSecurityGroupId: !Ref BastionHostSecurityGroup
           Tags:
             - Key: Name
               Value: !Ref NodeSecurityGroupName 
-          
+
 #Master Ec2 Instance  
     MasterEC2Instance:
       Type: AWS::EC2::Instance
@@ -109,11 +345,9 @@ Resources:
           ImageId: !Ref MasterInstanceAMI
           KeyName: !Ref KeyPairMaster
           InstanceType: !Ref MasterEc2InstanceType
-          NetworkInterfaces:
-              - AssociatePublicIpAddress: "true"
-                DeviceIndex: "0"
-                GroupSet:
-                  - !Ref MasterSecurityGroup
+          SubnetId: !Ref PublicSubnet
+          SecurityGroupIds:
+              - !Ref MasterSecurityGroup
           UserData:
             Fn::Base64:  |
               #!/bin/bash
@@ -130,6 +364,21 @@ Resources:
           Tags:
             - Key: Name
               Value: !Ref MasterInstanceName
+              
+#Bastion Host Ec2 Instance 
+    BastionHostEC2Instance:
+      Type: AWS::EC2::Instance
+      Properties:
+          ImageId: !Ref BastionHostAMI
+          KeyName: !Ref KeyPairBastionHost
+          InstanceType: !Ref BastionHostEc2InstanceType
+          SubnetId: !Ref PublicSubnet
+          SecurityGroupIds:
+              - !Ref BastionHostSecurityGroup
+          Tags:
+            - Key: Name
+              Value: !Ref BastionHostEc2InstanceName
+
 #Node Ec2 Instance 
     NodeEC2Instance:
       Type: AWS::EC2::Instance
@@ -137,11 +386,9 @@ Resources:
           ImageId: !Ref NodeInstanceAMI
           KeyName: !Ref KeyPairNode
           InstanceType: !Ref NodeEc2InstanceType
-          NetworkInterfaces:
-              - AssociatePublicIpAddress: "true"
-                DeviceIndex: "0"
-                GroupSet:
-                  - !Ref NodeSecurityGroup
+          SubnetId: !Ref PrivateSubnet
+          SecurityGroupIds:
+              - !Ref NodeSecurityGroup
           UserData:
             Fn::Base64: |
               #!/bin/bash
@@ -168,6 +415,7 @@ Resources:
               
               sudo apt update -y
               sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+              sudo apt install openjdk-21-jdk -y
           Tags:
             - Key: Name
               Value: !Ref NodeInstanceName
