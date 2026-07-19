@@ -184,6 +184,26 @@ Parameters:
           Default: "prodinstancesg"
           Description: "Production Instance Security Group Name"
 
+#Load balancer name
+    ApplicationLoadBalancerName:
+          Type: String
+          Default: "flaskappalb"
+          Description: "Application Load Balancer Name"
+
+#Load Balancer scheme ApplicationLoadBalancerScheme
+    ApplicationLoadBalancerScheme:
+          Type: String
+          Default: "internet-facing"
+          Description: "Application Load Balancer Scheme"
+
+#Load Balancer security group name
+    ALBSecurityGroupName:
+          Type: String
+          Default: "Alb-sg"
+          Description: "Application Load Balancer Security group"
+    
+
+
 
 
 Resources:
@@ -519,7 +539,39 @@ Resources:
           Tags:
             - Key: Name
               Value: !Ref ProdInstanceName
-              
-              
+
+#Security Group for Production Ec2 Instance
+    ALBSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: "Security Group for ALB"
+          VpcId: !Ref AbishekVPC
+          SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 5000
+                ToPort: 5000
+                CidrIp: 0.0.0.0/0
+                
+          Tags:
+            - Key: Name
+              Value: !Ref ALBSecurityGroupName 
+
+#Application Load balancer
+    MyLoadbalancer:
+      Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+      Properties:
+          IpAddressType: ipv4
+          Name: !Ref ApplicationLoadBalancerName
+          Scheme: !Ref ApplicationLoadBalancerScheme
+          SecurityGroups:
+            - !Ref ALBSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet
+          Type: application
+
+
+
+
+
                 
     
