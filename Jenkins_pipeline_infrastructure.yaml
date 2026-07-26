@@ -96,21 +96,38 @@ Parameters:
       Description: "The allowed tenancy of instances launched into the VPC"
 
 #Public Subnet name for jenkins master    
-    PublicSubnetNameJenkinsMaster:
+    PublicSubnetNameApsouth1a:
       Type: String
       Default: "publicsubnetjenkinsmaster"
       Description: "Public subnet for jenkins master"
 
+    PublicSubnetNameApsouth1b:
+      Type: String
+      Default: "publicsubnetapsouth1b"
+      Description: "Public subnet for jenkins master"
+
 #Public Subnet AZ    
-    AZNamePublicSubnet:
+    AZNamePublicSubnetApSouth1a:
       Type: String
       Default: "ap-south-1a"
       Description: "Public subnet AZ"
 
+    AZNamePublicSubnetApSouth1b:
+      Type: String
+      Default: "ap-south-1b"
+      Description: "Public subnet AZ"
+
+
 #Cidr block for public subnet 
-    PublicSubnetcidrblock:
+    PublicSubnetcidrblockApSouth1a:
       Type: String
       Default: "10.0.1.0/24"
+      Description: "Public subnet cidr block"
+
+#Cidr block for public subnet 
+    PublicSubnetcidrblockApSouth1b:
+      Type: String
+      Default: "10.0.3.0/24"
       Description: "Public subnet cidr block"
 
 #VPC Internet Gateway
@@ -201,6 +218,12 @@ Parameters:
           Type: String
           Default: "Alb-sg"
           Description: "Application Load Balancer Security group"
+
+#Load Balancer security group name
+    ALBTargetGroupName:
+          Type: String
+          Default: "Alb-targetgroup"
+          Description: "Application Load Balancer Target group"
     
 
 
@@ -218,16 +241,27 @@ Resources:
               Value: !Ref  VpcName
 
 #Public Subnet
-    PublicSubnet:
+    PublicSubnetApSouth1a:
       Type: AWS::EC2::Subnet
       Properties:
           VpcId: !Ref AbishekVPC
-          AvailabilityZone: !Ref AZNamePublicSubnet
-          CidrBlock: !Ref PublicSubnetcidrblock
+          AvailabilityZone: !Ref AZNamePublicSubnetApSouth1a
+          CidrBlock: !Ref PublicSubnetcidrblockApSouth1a
           MapPublicIpOnLaunch: true
           Tags:
               - Key: Name
-                Value: !Ref PublicSubnetNameJenkinsMaster
+                Value: !Ref PublicSubnetNameApsouth1a
+
+    PublicSubnetApSouth1b:
+      Type: AWS::EC2::Subnet
+      Properties:
+          VpcId: !Ref AbishekVPC
+          AvailabilityZone: !Ref AZNamePublicSubnetApSouth1b
+          CidrBlock: !Ref PublicSubnetcidrblockApSouth1b
+          MapPublicIpOnLaunch: true
+          Tags:
+              - Key: Name
+                Value: !Ref PublicSubnetNameApsouth1b
 
 #Internet Gateway
     InternetGw:
@@ -255,11 +289,19 @@ Resources:
                 Value: !Ref RouteTableNamePublicSubnet
 
 #Public Subnet Association with route table
-    PublicSubnetAssociation:
+    PublicSubnetAssociationApSouth1a:
       Type: AWS::EC2::SubnetRouteTableAssociation
       Properties:
           RouteTableId: !Ref PublicSubnetRouteTable
-          SubnetId: !Ref PublicSubnet
+          SubnetId: !Ref PublicSubnetApSouth1a
+
+    PublicSubnetAssociationApSouth1b:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+          RouteTableId: !Ref PublicSubnetRouteTable
+          SubnetId: !Ref PublicSubnetApSouth1b
+
+
 
 
 #Route for Internet Gateway
@@ -292,7 +334,7 @@ Resources:
       Type: AWS::EC2::NatGateway
       Properties:
         AllocationId: !GetAtt ElasticIp.AllocationId
-        SubnetId: !Ref PublicSubnet
+        SubnetId: !Ref PublicSubnetApSouth1a
         Tags:
             - Key: Name
               Value: !Ref NatGateway
@@ -415,130 +457,130 @@ Resources:
               Value: !Ref ProdInstanceSecurityGroupName 
 
 #Master Ec2 Instance  
-    MasterEC2Instance:
-      Type: AWS::EC2::Instance
-      Properties:
-          ImageId: !Ref MasterInstanceAMI
-          KeyName: !Ref KeyPairMaster
-          InstanceType: !Ref MasterEc2InstanceType
-          SubnetId: !Ref PublicSubnet
-          SecurityGroupIds:
-              - !Ref MasterSecurityGroup
-          UserData:
-            Fn::Base64:  |
-              #!/bin/bash
-              sudo apt update -y
-              sudo apt install openjdk-21-jdk -y
+    # MasterEC2Instance:
+    #   Type: AWS::EC2::Instance
+    #   Properties:
+    #       ImageId: !Ref MasterInstanceAMI
+    #       KeyName: !Ref KeyPairMaster
+    #       InstanceType: !Ref MasterEc2InstanceType
+    #       SubnetId: !Ref PublicSubnetApSouth1a
+    #       SecurityGroupIds:
+    #           - !Ref MasterSecurityGroup
+    #       UserData:
+    #         Fn::Base64:  |
+    #           #!/bin/bash
+    #           sudo apt update -y
+    #           sudo apt install openjdk-21-jdk -y
               
-              sudo wget -O /etc/apt/keyrings/jenkins-keyring.asc \
-                https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
-              echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc]" \
-                https://pkg.jenkins.io/debian-stable binary/ | sudo tee \
-                /etc/apt/sources.list.d/jenkins.list > /dev/null
-              sudo apt update -y
-              sudo apt install jenkins -y
-          Tags:
-            - Key: Name
-              Value: !Ref MasterInstanceName
+    #           sudo wget -O /etc/apt/keyrings/jenkins-keyring.asc \
+    #             https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+    #           echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc]" \
+    #             https://pkg.jenkins.io/debian-stable binary/ | sudo tee \
+    #             /etc/apt/sources.list.d/jenkins.list > /dev/null
+    #           sudo apt update -y
+    #           sudo apt install jenkins -y
+    #       Tags:
+    #         - Key: Name
+    #           Value: !Ref MasterInstanceName
               
 #Bastion Host Ec2 Instance 
-    BastionHostEC2Instance:
-      Type: AWS::EC2::Instance
-      Properties:
-          ImageId: !Ref BastionHostAMI
-          KeyName: !Ref KeyPairBastionHost
-          InstanceType: !Ref BastionHostEc2InstanceType
-          SubnetId: !Ref PublicSubnet
-          SecurityGroupIds:
-              - !Ref BastionHostSecurityGroup
-          Tags:
-            - Key: Name
-              Value: !Ref BastionHostEc2InstanceName
+    # BastionHostEC2Instance:
+    #   Type: AWS::EC2::Instance
+    #   Properties:
+    #       ImageId: !Ref BastionHostAMI
+    #       KeyName: !Ref KeyPairBastionHost
+    #       InstanceType: !Ref BastionHostEc2InstanceType
+    #       SubnetId: !Ref PublicSubnetApSouth1a
+    #       SecurityGroupIds:
+    #           - !Ref BastionHostSecurityGroup
+    #       Tags:
+    #         - Key: Name
+    #           Value: !Ref BastionHostEc2InstanceName
 
 #Node Ec2 Instance 
-    NodeEC2Instance:
-      Type: AWS::EC2::Instance
-      Properties:
-          ImageId: !Ref NodeInstanceAMI
-          KeyName: !Ref KeyPairNode
-          InstanceType: !Ref NodeEc2InstanceType
-          SubnetId: !Ref PrivateSubnet
-          SecurityGroupIds:
-              - !Ref NodeSecurityGroup
-          UserData:
-            Fn::Base64: |
-              #!/bin/bash
-              sudo apt update -y
-              sudo apt install python3 -y
-              sudo apt remove -y $(dpkg --get-selections docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc | cut -f1)
+    # NodeEC2Instance:
+    #   Type: AWS::EC2::Instance
+    #   Properties:
+    #       ImageId: !Ref NodeInstanceAMI
+    #       KeyName: !Ref KeyPairNode
+    #       InstanceType: !Ref NodeEc2InstanceType
+    #       SubnetId: !Ref PrivateSubnet
+    #       SecurityGroupIds:
+    #           - !Ref NodeSecurityGroup
+    #       UserData:
+    #         Fn::Base64: |
+    #           #!/bin/bash
+    #           sudo apt update -y
+    #           sudo apt install python3 -y
+    #           sudo apt remove -y $(dpkg --get-selections docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc | cut -f1)
 
-              # Add Docker's official GPG key:
-              sudo apt update -y
-              sudo apt install ca-certificates curl -y
-              sudo install -m 0755 -d /etc/apt/keyrings
-              sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-              sudo chmod a+r /etc/apt/keyrings/docker.asc
+    #           # Add Docker's official GPG key:
+    #           sudo apt update -y
+    #           sudo apt install ca-certificates curl -y
+    #           sudo install -m 0755 -d /etc/apt/keyrings
+    #           sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    #           sudo chmod a+r /etc/apt/keyrings/docker.asc
 
-              # Add the repository to Apt sources:
-              sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
-              Types: deb
-              URIs: https://download.docker.com/linux/ubuntu
-              Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-              Components: stable
-              Architectures: $(dpkg --print-architecture)
-              Signed-By: /etc/apt/keyrings/docker.asc
-              EOF
+    #           # Add the repository to Apt sources:
+    #           sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
+    #           Types: deb
+    #           URIs: https://download.docker.com/linux/ubuntu
+    #           Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+    #           Components: stable
+    #           Architectures: $(dpkg --print-architecture)
+    #           Signed-By: /etc/apt/keyrings/docker.asc
+    #           EOF
 
-              sudo apt update -y
+    #           sudo apt update -y
 
-              sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
-              sudo apt install openjdk-21-jdk -y
-              sudo apt install python3-pip -y
-          Tags:
-            - Key: Name
-              Value: !Ref NodeInstanceName
+    #           sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+    #           sudo apt install openjdk-21-jdk -y
+    #           sudo apt install python3-pip -y
+    #       Tags:
+    #         - Key: Name
+    #           Value: !Ref NodeInstanceName
 
 #Production Ec2 Instance 
-    ProductionEC2Instance:
-      Type: AWS::EC2::Instance
-      Properties:
-          ImageId: !Ref ProdInstanceAMI
-          KeyName: !Ref KeyPairMaster
-          InstanceType: !Ref ProdEc2InstanceType
-          SubnetId: !Ref PublicSubnet
-          SecurityGroupIds:
-              - !Ref ProdInstanceSecurityGroup
-          UserData:
-            Fn::Base64: |
-              #!/bin/bash
-              sudo apt update -y
-              sudo apt install python3 -y
-              sudo apt remove -y $(dpkg --get-selections docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc | cut -f1)
+    # ProductionEC2Instance:
+    #   Type: AWS::EC2::Instance
+    #   Properties:
+    #       ImageId: !Ref ProdInstanceAMI
+    #       KeyName: !Ref KeyPairMaster
+    #       InstanceType: !Ref ProdEc2InstanceType
+    #       SubnetId: !Ref PublicSubnetApSouth1a
+    #       SecurityGroupIds:
+    #           - !Ref ProdInstanceSecurityGroup
+    #       UserData:
+    #         Fn::Base64: |
+    #           #!/bin/bash
+    #           sudo apt update -y
+    #           sudo apt install python3 -y
+    #           sudo apt remove -y $(dpkg --get-selections docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc | cut -f1)
 
-              # Add Docker's official GPG key:
-              sudo apt update -y
-              sudo apt install ca-certificates curl -y
-              sudo install -m 0755 -d /etc/apt/keyrings
-              sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-              sudo chmod a+r /etc/apt/keyrings/docker.asc
+    #           # Add Docker's official GPG key:
+    #           sudo apt update -y
+    #           sudo apt install ca-certificates curl -y
+    #           sudo install -m 0755 -d /etc/apt/keyrings
+    #           sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    #           sudo chmod a+r /etc/apt/keyrings/docker.asc
 
-              # Add the repository to Apt sources:
-              sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
-              Types: deb
-              URIs: https://download.docker.com/linux/ubuntu
-              Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-              Components: stable
-              Architectures: $(dpkg --print-architecture)
-              Signed-By: /etc/apt/keyrings/docker.asc
-              EOF
+    #           # Add the repository to Apt sources:
+    #           sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
+    #           Types: deb
+    #           URIs: https://download.docker.com/linux/ubuntu
+    #           Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+    #           Components: stable
+    #           Architectures: $(dpkg --print-architecture)
+    #           Signed-By: /etc/apt/keyrings/docker.asc
+    #           EOF
 
-              sudo apt update -y
+    #           sudo apt update -y
 
-              sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
-              sudo apt install openjdk-21-jdk -y
-          Tags:
-            - Key: Name
-              Value: !Ref ProdInstanceName
+    #           sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+    #           sudo apt install openjdk-21-jdk -y
+    #       Tags:
+    #         - Key: Name
+    #           Value: !Ref ProdInstanceName
 
 #Security Group for Production Ec2 Instance
     ALBSecurityGroup:
@@ -551,11 +593,15 @@ Resources:
                 FromPort: 5000
                 ToPort: 5000
                 CidrIp: 0.0.0.0/0
-                
+              - IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
           Tags:
             - Key: Name
               Value: !Ref ALBSecurityGroupName 
 
+# ALB
 #Application Load balancer
     MyLoadbalancer:
       Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -564,10 +610,35 @@ Resources:
           Name: !Ref ApplicationLoadBalancerName
           Scheme: !Ref ApplicationLoadBalancerScheme
           SecurityGroups:
-            - !Ref ALBSecurityGroup
+            - !Ref ALBSecurityGroup           
           Subnets:
-            - !Ref PublicSubnet
+            - !Ref PublicSubnetApSouth1a
+            - !Ref PublicSubnetApSouth1b
+#At least 2 subnets in 2 different Az should be specified 
           Type: application
+
+#Application Load balancer target group
+    MyLoadbalancerTargetGroup:
+      Type: AWS::ElasticLoadBalancingV2::TargetGroup
+      Properties:
+          Name: !Ref ALBTargetGroupName
+          Port: 80
+          Protocol: HTTP
+          TargetType: instance
+          VpcId: !Ref AbishekVPC
+
+#Application Load balancer Listener
+    MyLoadbalancerListener:
+      Type: AWS::ElasticLoadBalancingV2::Listener
+      Properties:
+        LoadBalancerArn: !Ref MyLoadbalancer
+        Port: 80
+        Protocol: HTTP
+        DefaultActions:
+          - Type: forward
+            TargetGroupArn: !Ref MyLoadbalancerTargetGroup
+
+
 
 
 
