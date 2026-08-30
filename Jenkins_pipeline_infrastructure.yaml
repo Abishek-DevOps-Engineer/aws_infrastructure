@@ -66,6 +66,11 @@ Parameters:
       Type: String
       Default: "masterkeypair"
       Description: "Master key Pair"
+
+    KeyPairProd:
+      Type: String
+      Default: "prodkeypair"
+      Description: "Prod key Pair"
     
     KeyPairBastionHost:
       Type: String
@@ -176,6 +181,12 @@ Parameters:
     RouteTableNamePrivateSubnet:
       Type: String
       Default: "privatesubnetroutetable"
+      Description: "Route table for Private Subnet"
+
+#Route Table Name Private Subnet
+    RouteTableNamePrivateSubnetApsouth1b:
+      Type: String
+      Default: "privatesubnetroutetableapsouth1b"
       Description: "Route table for Private Subnet"
 
 #Private Subnet AZ name    
@@ -355,19 +366,37 @@ Resources:
           Tags:
               - Key: Name
                 Value: !Ref PrivateSubnetNameapsouth1a
-#Elastic IP
-    ElasticIp:
+
+#Elastic IP ap south 1a
+    ElasticIpApSouth1a:
+      Type: AWS::EC2::EIP
+      Properties:
+          Domain: vpc
+
+#Elastic IP ap south 1b
+    ElasticIpApSouth1b:
       Type: AWS::EC2::EIP
       Properties:
           Domain: vpc
                 
+                
 
-#NAT Gateway
-    NATGw:
+#NAT Gateway ap south 1a
+    NATGwApsouth1a:
       Type: AWS::EC2::NatGateway
       Properties:
-        AllocationId: !GetAtt ElasticIp.AllocationId
+        AllocationId: !GetAtt ElasticIpApSouth1a.AllocationId
         SubnetId: !Ref PublicSubnetApSouth1a
+        Tags:
+            - Key: Name
+              Value: !Ref NatGateway
+
+#NAT Gateway ap south 1b
+    NATGwApSouth1b:
+      Type: AWS::EC2::NatGateway
+      Properties:
+        AllocationId: !GetAtt ElasticIpApSouth1b.AllocationId
+        SubnetId: !Ref PublicSubnetApSouth1b
         Tags:
             - Key: Name
               Value: !Ref NatGateway
@@ -381,11 +410,21 @@ Resources:
               - Key: Name
                 Value: !Ref RouteTableNamePrivateSubnet
 
+  #Route Table Private Subnet
+    PrivateSubnetRouteTableApsouth1b:
+      Type: AWS::EC2::RouteTable
+      Properties:
+          VpcId: !Ref AbishekVPC
+          Tags:
+              - Key: Name
+                Value: !Ref RouteTableNamePrivateSubnetApsouth1b
+                
+
 #Private Subnet Association with route table
     PrivateSubnetAssociation:
       Type: AWS::EC2::SubnetRouteTableAssociation
       Properties:
-          RouteTableId: !Ref PrivateSubnetRouteTable
+          RouteTableId: !Ref PrivateSubnetRouteTableApsouth1b
           SubnetId: !Ref PrivateSubnet
 
 #Private Subnet Association with route table ap south 1a
@@ -396,12 +435,19 @@ Resources:
           SubnetId: !Ref PrivateSubnetapsouth1a
 
 #Route for NAT Gateway
-    NATgwRoute:
+    NATgwRouteApsouth1a:
       Type: AWS::EC2::Route
       Properties:
           RouteTableId: !Ref PrivateSubnetRouteTable
           DestinationCidrBlock: 0.0.0.0/0
-          NatGatewayId: !Ref NATGw
+          NatGatewayId: !Ref NATGwApsouth1a
+
+    NATgwRouteApSouth1b:
+      Type: AWS::EC2::Route
+      Properties:
+          RouteTableId: !Ref PrivateSubnetRouteTableApsouth1b
+          DestinationCidrBlock: 0.0.0.0/0
+          NatGatewayId: !Ref NATGwApSouth1b
     
 
 #Security Group for Bastion Host
@@ -478,7 +524,7 @@ Resources:
               - IpProtocol: tcp
                 FromPort: 5000
                 ToPort: 5000
-                CidrIp: 0.0.0.0/0
+                SourceSecurityGroupId: !Ref ALBSecurityGroup
               - IpProtocol: tcp
                 FromPort: 9090
                 ToPort: 9090
@@ -630,10 +676,6 @@ Resources:
           VpcId: !Ref AbishekVPC
           SecurityGroupIngress:
               - IpProtocol: tcp
-                FromPort: 5000
-                ToPort: 5000
-                CidrIp: 0.0.0.0/0
-              - IpProtocol: tcp
                 FromPort: 80
                 ToPort: 80
                 CidrIp: 0.0.0.0/0
@@ -658,14 +700,34 @@ Resources:
           Type: application
 
 #Application Load balancer target group
+    # MyLoadbalancerTargetGroup:
+    #   Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    #   Properties:
+    #       Name: !Ref ALBTargetGroupName
+    #       Port: 5000
+    #       Protocol: HTTP
+    #       TargetType: instance
+    #       VpcId: !Ref AbishekVPC
+
+
     MyLoadbalancerTargetGroup:
       Type: AWS::ElasticLoadBalancingV2::TargetGroup
       Properties:
           Name: !Ref ALBTargetGroupName
-          Port: 80
+          Port: 5000
           Protocol: HTTP
           TargetType: instance
           VpcId: !Ref AbishekVPC
+          HealthCheckEnabled: true
+          HealthCheckProtocol: HTTP
+          HealthCheckPort: traffic-port
+          HealthCheckPath: /
+          HealthCheckIntervalSeconds: 30
+          HealthCheckTimeoutSeconds: 10
+          HealthyThresholdCount: 2
+          UnhealthyThresholdCount: 3
+          Matcher:
+            HttpCode: '200'
 
 #Application Load balancer Listener
     MyLoadbalancerListener:
@@ -686,7 +748,8 @@ Resources:
         LaunchTemplateName: asg-launch-template
         LaunchTemplateData:
           ImageId: !Ref ProdInstanceAMI
-          KeyName: !Ref KeyPairMaster
+          KeyName: !Ref KeyPairProd
+          InstanceType: !Ref ProdEc2InstanceType
           SecurityGroupIds:
             - !Ref ProdInstanceSecurityGroup
           UserData:
@@ -717,12 +780,16 @@ Resources:
 
               sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
 
+              sudo usermod -aG docker ubuntu
+
+              docker run -d -p 5000:5000 abishek1710/flaskweatherapp:v1
+
 #Added ASG
     AutoScalingGroup:
       Type: AWS::AutoScaling::AutoScalingGroup
       Properties:
         AutoScalingGroupName: !Ref ASGName
-        MaxSize: 3
+        MaxSize: 4
         MinSize: 2
         DesiredCapacity: 3
         LaunchTemplate:
@@ -733,6 +800,7 @@ Resources:
 #Instances created in multi AZ subnets are added here
         VPCZoneIdentifier:
           - !Ref PrivateSubnet
+          - !Ref PrivateSubnetapsouth1a
 
 
     
